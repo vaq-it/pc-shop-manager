@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProductCategory {
+  CPU
+  MAINBOARD
+  RAM
+  VGA
+  PSU
+  STORAGE
+  CASE
+  COOLING
+  MONITOR
+  LAPTOP_PART
+  PERIPHERAL
+  OTHER
+}
+
+enum ProductType {
+  COMPONENT // linh kiện rời
+  PREBUILT // máy bộ / laptop nguyên chiếc
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  UNPAID
+}
+
+enum WarrantyStatus {
+  PENDING // mới tạo, chờ kiểm tra
+  IN_PROGRESS // đang xử lý / sửa chữa
+  REPLACED // đã đổi hàng
+  REPAIRED // đã sửa xong
+  REJECTED // từ chối bảo hành
+}
+
+model Supplier {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String?
+  address   String?
+  note      String?
+  createdAt DateTime  @default(now())
+  products  Product[]
+  purchases PurchaseOrder[]
+}
+
+model Product {
+  id             String          @id @default(cuid())
+  sku            String          @unique
+  name           String
+  category       ProductCategory
+  type           ProductType     @default(COMPONENT)
+  brand          String?
+  unit           String          @default("cái")
+  costPrice      Decimal         @db.Decimal(12, 0)
+  sellPrice      Decimal         @db.Decimal(12, 0)
+  quantityInStock Int            @default(0)
+  lowStockAlert  Int             @default(2)
+  warrantyMonths Int             @default(12)
+  supplierId     String?
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  purchaseItems  PurchaseOrderItem[]
+  saleItems      SalesOrderItem[]
+
+  @@index([category])
+  @@index([name])
+}
+
+model PurchaseOrder {
+  id         String              @id @default(cuid())
+  supplierId String?
+  supplier   Supplier?           @relation(fields: [supplierId], references: [id])
+  note       String?
+  createdBy  String?
+  createdAt  DateTime            @default(now())
+  items      PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Int
+  unitCost        Decimal       @db.Decimal(12, 0)
+}
+
+model Customer {
+  id        String          @id @default(cuid())
+  name      String
+  phone     String          @unique
+  address   String?
+  note      String?
+  createdAt DateTime        @default(now())
+  orders    SalesOrder[]
+  claims    WarrantyClaim[]
+}
+
+model SalesOrder {
+  id            String           @id @default(cuid())
+  code          String           @unique // mã hóa đơn hiển thị cho khách, vd HD-000123
+  customerId    String?
+  customer      Customer?        @relation(fields: [customerId], references: [id])
+  createdBy     String?
+  totalAmount   Decimal          @db.Decimal(12, 0)
+  paymentStatus PaymentStatus    @default(PAID)
+  note          String?
+  createdAt     DateTime         @default(now())
+  items         SalesOrderItem[]
+}
+
+model SalesOrderItem {
+  id                String         @id @default(cuid())
+  salesOrderId      String
+  salesOrder        SalesOrder     @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product        @relation(fields: [productId], references: [id])
+  quantity          Int
+  unitPrice         Decimal        @db.Decimal(12, 0)
+  warrantyStartDate DateTime       @default(now())
+  warrantyEndDate   DateTime
+  claims            WarrantyClaim[]
+}
+
+model WarrantyClaim {
+  id                 String         @id @default(cuid())
+  salesOrderItemId   String
+  salesOrderItem     SalesOrderItem @relation(fields: [salesOrderItemId], references: [id])
+  customerId         String?
+  customer           Customer?      @relation(fields: [customerId], references: [id])
+  issueDescription   String
+  status             WarrantyStatus @default(PENDING)
+  resolvedAt         DateTime?
+  note               String?
+  createdAt          DateTime       @default(now())
+}
